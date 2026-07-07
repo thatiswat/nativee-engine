@@ -1,6 +1,7 @@
 import time
 import uuid
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 
 import edge_tts
 from fastapi import HTTPException
@@ -26,6 +27,7 @@ DEFAULT_VOICE = "en-IN-NeerjaNeural"
 # ==========================================================
 
 class TTSProvider(ABC):
+
     @abstractmethod
     async def synthesize(
         self,
@@ -43,6 +45,7 @@ class TTSProvider(ABC):
 # ==========================================================
 
 class EdgeProvider(TTSProvider):
+
     async def synthesize(
         self,
         text: str,
@@ -62,6 +65,7 @@ class EdgeProvider(TTSProvider):
         )
 
         try:
+
             communicate = edge_tts.Communicate(
                 text=text.strip(),
                 voice=voice,
@@ -84,6 +88,7 @@ class EdgeProvider(TTSProvider):
             return str(output_file)
 
         except Exception as exc:
+
             output_file.unlink(
                 missing_ok=True,
             )
@@ -97,24 +102,37 @@ class EdgeProvider(TTSProvider):
                 detail=f"TTS failed: {exc}",
             )
 
+    async def stream(
+        self,
+        text: str,
+        language: str,
+    ) -> AsyncIterator[bytes]:
 
-# ==========================================================
-# Future Providers
-# ==========================================================
+        voice = VOICE_MAP.get(
+            language,
+            DEFAULT_VOICE,
+        )
 
-# class AzureProvider(TTSProvider):
-#     async def synthesize(
-#         self,
-#         text: str,
-#         language: str,
-#     ) -> str:
-#         ...
+        communicate = edge_tts.Communicate(
+            text=text.strip(),
+            voice=voice,
+        )
 
+        start = time.perf_counter()
+        first_chunk = True
 
-# class ElevenLabsProvider(TTSProvider):
-#     async def synthesize(
-#         self,
-#         text: str,
-#         language: str,
-#     ) -> str:
-#         ...
+        async for chunk in communicate.stream():
+
+            if chunk["type"] != "audio":
+                continue
+
+            if first_chunk:
+
+                first_chunk = False
+
+                logger.info(
+                    "Edge TTFA %.3fs",
+                    time.perf_counter() - start,
+                )
+
+            yield chunk["data"]

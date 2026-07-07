@@ -1,3 +1,5 @@
+from collections.abc import AsyncIterator
+
 from app.providers.edge import EdgeProvider
 
 
@@ -16,6 +18,18 @@ class SynthesisService:
             text,
             language,
         )
+
+    async def stream(
+        self,
+        text: str,
+        language: str,
+    ) -> AsyncIterator[bytes]:
+
+        async for chunk in self.provider.stream(
+            text,
+            language,
+        ):
+            yield chunk
 
 
 synthesis_service = SynthesisService()
